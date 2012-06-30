@@ -23,7 +23,9 @@ SET (CMAKE_ARCHIVE_OUTPUT_DIRECTORY
    "Single Directory for all"
   )
 
-SET(AlgoTests_source main.cpp)
+SET(AlgoTests_source main.cpp support.cpp)
+SET(SortChecker_source sort_checker.cpp)
 
 ADD_EXECUTABLE(algo_tests ${AlgoTests_source})
+ADD_EXECUTABLE(sort_checker ${SortChecker_source})
 

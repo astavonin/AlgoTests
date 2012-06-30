@@ -8,58 +8,9 @@
 #include <chrono>
 #include <iomanip>
 #include <iterator>
+#include "support.hpp"
 
 using namespace std::chrono;
-
-template<typename T>
-void print_buffer(const std::vector<T> buffer)
-{
-    std::cout << std::hex;
-    std::copy(buffer.begin(), buffer.end(), std::ostream_iterator<T>(std::cout, " "));
-    std::cout << std::endl;
-}
-
-template<typename T>
-void isSorted(const std::string fileName)
-{
-    std::ifstream in(fileName.c_str(), std::ios::in | std::ios::binary);
-    if(in.is_open())
-    {
-        in.seekg(0, std::ios::end);
-        size_t inLen = in.tellg();
-        in.seekg(0, std::ios::beg);
-        std::vector<T> buffer(inLen / sizeof(T));
-        in.read((char*)&buffer[0], inLen);
-
-        T previous = buffer[0];
-        for(int i=1; i<buffer.size(); ++i)
-        {
-            if(previous > buffer[i])
-            {
-                std::cout << "File: " << fileName << " is UNSORTED " << std::hex << buffer[i-1] 
-                    << " " << buffer[i] << " " << buffer[i+1] << std::endl;
-                return;
-            }
-            previous = buffer[i];
-        }
-    }
-}
-
-template<typename T>
-void isSorted(const std::vector<T> buffer, size_t size)
-{
-    T previous = buffer[0];
-    for(int i=1; i<size; ++i)
-    {
-        if(previous > buffer[i])
-        {
-            std::cout << "UNSORTED " << std::hex << buffer[i-1] 
-                << " " << buffer[i] << std::endl;
-            return;
-        }
-        previous = buffer[i];
-    }
-}
 
 
 template<typename T>
@@ -134,17 +85,6 @@ void mergeBuffers(SortBuffer<T> &l, SortBuffer<T> &r, SortBuffer<T> &out)
         }
     }
     out.pos = l.pos+r.pos-delta;
-}
-
-const std::string genNewTempFileName()
-{
-    static int lastUsedFileNumber = 0;
-
-    std::stringstream tmpBuffer;
-    tmpBuffer << "tmp_" << std::setfill('0') << std::setw(2) << lastUsedFileNumber;
-    lastUsedFileNumber++;
-
-    return tmpBuffer.str();
 }
 
 typedef std::vector<std::string> FilesList;
@@ -223,7 +163,6 @@ void mergeFiles(const FilesList &list)
                 out.write((char*)&currentBuffer.data[currentBuffer.pos], (currentBuffer.count - currentBuffer.pos) * sizeof(T));
             }
         }while((!isEmptyLeft || !isEmptyRight) && outBuffer.pos != 0);
-        //isSorted<T>(outFileName);
         resultList.push_back(outFileName);
     }
     if(resultList.size() > 1)
@@ -262,30 +201,6 @@ void sort(const std::string &inFile, const std::string &outFile)
     }
 }
 
-void rwTest(const std::string &inFile, const std::string &outFile)
-{
-    size_t inBuffLen = 256*1000*1000;
-    std::vector<uint32_t> inBuffer(inBuffLen / sizeof(uint32_t));
-
-    std::ifstream in(inFile.c_str(), std::ios::in | std::ios::binary);
-    if(in.is_open())
-    {
-        in.seekg(0, std::ios::end);
-        size_t inLen = in.tellg();
-        in.seekg(0, std::ios::beg);
-
-        int fragments = inLen / inBuffLen;
-        std::ofstream out(outFile.c_str(), std::ios::out | std::ios::binary);
-        for(int i=0; i < fragments; i++)
-        {
-            in.read((char*)&inBuffer[0], inBuffLen);
-            inBuffer[10] = 100;
-
-            out.write((char*)&inBuffer[0], inBuffLen);
-        }
-    }
-}
-
 void printDiff(const time_point<high_resolution_clock> &start, const time_point<high_resolution_clock> &stop)
 {
     std::cout << duration_cast<milliseconds>(stop-start).count() << " millisecond" << std::endl;
@@ -295,21 +210,15 @@ int main(int argc, char* argv[])
 {
     if(argc < 2)
     {
-        std::cout << "Usage:\n\tyandex file_name" << std::endl;
+        std::cout << "Usage:\n\talgo_test file_name" << std::endl;
         return -1;
     }
 
     const std::string input(argv[1]);
 
     auto start = high_resolution_clock::now();
-    //rwTest(input, input+"_out");
-    auto stop = high_resolution_clock::now();
-    std::cout << "R/W test: ";
-    printDiff(start, stop);
-
-    start = high_resolution_clock::now();
     sort<uint32_t>(input, input+"_out");
-    stop = high_resolution_clock::now();
+    auto stop = high_resolution_clock::now();
     std::cout << "sort test: ";
     printDiff(start, stop);
 

@@ -3,3 +3,9 @@ CMakeFiles
 Makefile
 cmake_install.cmake
 install_manifest.txt
+tmp_*
+random_data
+build
+*.swp
+.DS_Store
+
