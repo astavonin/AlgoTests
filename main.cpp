@@ -92,7 +92,7 @@ typedef std::vector<std::string> FilesList;
 template<typename T>
 void mergeFiles(const FilesList &list)
 {
-    size_t inBuffLen = 50*1000*1000 / sizeof(T);
+    size_t inBuffLen = 40*1024*1024 / sizeof(T);
     //size_t inBuffLen = 200;
     size_t outBuffLen = inBuffLen*2;
 
@@ -130,7 +130,7 @@ void mergeFiles(const FilesList &list)
                 inBufferL.pos = 0;
                 if(isEmptyLeft = fileLeft.eof())
                     inBufferL.count = fileLeft.gcount() / sizeof(T);
-                std::cout << "Left: " << inBufferL.count << std::endl;
+                //std::cout << "Left: " << inBufferL.count << std::endl;
             }
             if(!isEmptyRight && inBufferR.pos == inBuffLen)
             {
@@ -138,7 +138,7 @@ void mergeFiles(const FilesList &list)
                 inBufferR.pos = 0;
                 if(isEmptyRight = fileRight.eof())
                     inBufferR.count = fileRight.gcount() / sizeof(T);
-                std::cout << "Right: " << inBufferR.count << std::endl;
+                //std::cout << "Right: " << inBufferR.count << std::endl;
             }
             outBuffer.pos = 0;
             mergeBuffers(inBufferL, inBufferR, outBuffer);
@@ -146,20 +146,20 @@ void mergeFiles(const FilesList &list)
             {
                 //isSorted(outBuffer.data, outBuffer.pos);
                 out.write((char*)&outBuffer.data[0], outBuffer.pos * sizeof(T));
-                std::cout << "To out: " << outBuffer.pos
-                    << " Left: " << inBufferL.count - inBufferL.pos << " " << isEmptyLeft
-                    << " Right: " << inBufferR.count - inBufferR.pos << " " <<isEmptyRight
-                    << std::endl;
+                //std::cout << "To out: " << outBuffer.pos
+                    //<< " Left: " << inBufferL.count - inBufferL.pos << " " << isEmptyLeft
+                    //<< " Right: " << inBufferR.count - inBufferR.pos << " " <<isEmptyRight
+                    //<< std::endl;
             }
             if((inBufferL.count - inBufferL.pos > 0 || inBufferR.count - inBufferR.pos > 0) &&
                 (isEmptyLeft && isEmptyRight) || outBuffer.pos == 0)
             {
                 auto &currentBuffer = (inBufferL.count - inBufferL.pos > 0) ?
                     inBufferL : inBufferR;
-                std::cout << "To out (1): " << currentBuffer.count - currentBuffer.pos
-                    << " Left: " << inBufferL.count - inBufferL.pos
-                    << " Right: " << inBufferR.count - inBufferR.pos
-                    << std::endl;
+                //std::cout << "To out (1): " << currentBuffer.count - currentBuffer.pos
+                    //<< " Left: " << inBufferL.count - inBufferL.pos
+                    //<< " Right: " << inBufferR.count - inBufferR.pos
+                    //<< std::endl;
                 out.write((char*)&currentBuffer.data[currentBuffer.pos], (currentBuffer.count - currentBuffer.pos) * sizeof(T));
             }
         }while((!isEmptyLeft || !isEmptyRight) && outBuffer.pos != 0);
@@ -169,10 +169,15 @@ void mergeFiles(const FilesList &list)
         mergeFiles<T>(resultList);
 }
 
+void printDiff(const time_point<high_resolution_clock> &start, const time_point<high_resolution_clock> &stop)
+{
+    std::cout << duration_cast<milliseconds>(stop-start).count() << " millisecond" << std::endl;
+}
+
 template<typename T>
 void sort(const std::string &inFile, const std::string &outFile)
 {
-   size_t inBuffLen = 100*1000*1000;
+   size_t inBuffLen = 128*1024*1024;
     //size_t inBuffLen = 1000;
     std::vector<T> inBuffer(inBuffLen / sizeof(T));
 
@@ -199,11 +204,6 @@ void sort(const std::string &inFile, const std::string &outFile)
         }
         mergeFiles<T>(files);
     }
-}
-
-void printDiff(const time_point<high_resolution_clock> &start, const time_point<high_resolution_clock> &stop)
-{
-    std::cout << duration_cast<milliseconds>(stop-start).count() << " millisecond" << std::endl;
 }
 
 int main(int argc, char* argv[])
