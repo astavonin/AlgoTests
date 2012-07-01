@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8)
 
-set(CMAKE_CXX_COMPILER g++-mp-4.7)
+IF(APPLE)
+    set(CMAKE_CXX_COMPILER g++-mp-4.7)
+ENDIF(APPLE)
 ADD_DEFINITIONS("-std=c++11")
 
 project(AlgoTests)
