@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 2.8)
 
+ADD_DEFINITIONS("-std=c++0x")
 IF(APPLE)
     set(CMAKE_CXX_COMPILER g++-mp-4.7)
+    ADD_DEFINITIONS("-std=c++11")
 ENDIF(APPLE)
-ADD_DEFINITIONS("-std=c++11")
 
 project(AlgoTests)
 
