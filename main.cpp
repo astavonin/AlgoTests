@@ -48,17 +48,58 @@ void qsort(std::vector<uint32_t> &arr)
 }
 
 template<typename T>
-struct SortBuffer
+class SortBuffer
 {
-	size_t pos;
-	size_t count;
+public:
 	std::vector<T> data;
-	
+
 	SortBuffer(size_t buffSize)
+        : isEmpty_(false)
+        , pos_(0)
+        , storedCount_(0)
+        , capacity_(buffSize)
 	{
 		data.resize(buffSize);
-		pos = 0;
 	}
+
+    bool setOutFile(const std::string fileName)
+    {
+        outputStream_.open(fileName.c_str(), std::ios::out | std::ios::binary);
+        return outputStream_.is_open();
+    }
+
+    bool setInFile(const std::string fileName)
+    {
+        inputStream_.open(fileName.c_str(), std::ios::in | std::ios::binary);
+        return inputStream_.is_open();
+    }
+
+    void fillBuffer()
+    {
+        assert(inputStream_.is_open());
+
+        inputStream_.read((char*)&data[0], capacity_ * sizeof(T));
+        pos_ = 0;
+        isEmpty_ = fileLeft.eof();
+        storedCount_ = inputStream_.gcount() / sizeof(T);
+    }
+
+    bool isEmpty()
+    {
+        return isEmpty_;
+    }
+
+    bool isAllReaded()
+    {
+        return pos_ == capacity_;
+    }
+private:
+    std::ofstream outputStream_;
+    std::ifstream inputStream_;
+    bool isEmpty_;
+	size_t pos_;
+	size_t storedCount_;
+    size_t capacity_;
 };
 
 template<typename T>
@@ -175,33 +216,41 @@ void printDiff(const time_point<high_resolution_clock> &start, const time_point<
 }
 
 template<typename T>
-void sort(const std::string &inFile, const std::string &outFile)
+FilesList sortFragments(std::ifstream &in)
 {
    size_t inBuffLen = 128*1024*1024;
     //size_t inBuffLen = 1000;
     std::vector<T> inBuffer(inBuffLen / sizeof(T));
 
+    in.seekg(0, std::ios::end);
+    size_t inLen = in.tellg();
+    //size_t inLen = 10 * 1000;
+    in.seekg(0, std::ios::beg);
+
+    int fragments = inLen / inBuffLen;
+    FilesList files(fragments);
+    std::cout << "Total fragments: " << fragments << std::endl;
+    for(int i=0; i < fragments; i++)
+    {
+        std::cout << "Current fragment: " << i << std::endl;
+        in.read((char*)&inBuffer[0], inBuffLen);
+
+        qsort(inBuffer);
+        files[i] = genNewTempFileName();
+        std::ofstream out(files[i].c_str(), std::ios::out | std::ios::binary);
+        out.write((char*)&inBuffer[0], inBuffLen);
+    }
+
+    return files;
+}
+
+template<typename T>
+void sort(const std::string &inFile, const std::string &outFile)
+{
     std::ifstream in(inFile.c_str(), std::ios::in | std::ios::binary);
     if(in.is_open())
     {
-        in.seekg(0, std::ios::end);
-        size_t inLen = in.tellg();
-        //size_t inLen = 10 * 1000;
-        in.seekg(0, std::ios::beg);
-
-        int fragments = inLen / inBuffLen;
-        FilesList files(fragments);
-        std::cout << "Total fragments: " << fragments << std::endl;
-        for(int i=0; i < fragments; i++)
-        {
-            std::cout << "Current fragment: " << i << std::endl;
-            in.read((char*)&inBuffer[0], inBuffLen);
-
-            qsort(inBuffer);
-            files[i] = genNewTempFileName();
-            std::ofstream out(files[i].c_str(), std::ios::out | std::ios::binary);
-            out.write((char*)&inBuffer[0], inBuffLen);
-        }
+        FilesList files = sortFragments<T>(in);
         mergeFiles<T>(files);
     }
 }
