@@ -8,6 +8,7 @@
 #include <chrono>
 #include <iomanip>
 #include <iterator>
+#include <cassert>
 #include "support.hpp"
 
 using namespace std::chrono;
@@ -51,15 +52,14 @@ template<typename T>
 class SortBuffer
 {
 public:
-	std::vector<T> data;
 
 	SortBuffer(size_t buffSize)
         : isEmpty_(false)
-        , pos_(0)
+        , pos_(buffSize)
         , storedCount_(0)
         , capacity_(buffSize)
 	{
-		data.resize(buffSize);
+		data_.resize(buffSize);
 	}
 
     bool setOutFile(const std::string fileName)
@@ -71,31 +71,96 @@ public:
     bool setInFile(const std::string fileName)
     {
         inputStream_.open(fileName.c_str(), std::ios::in | std::ios::binary);
-        return inputStream_.is_open();
+        if(inputStream_.is_open())
+        {
+            pos_ = 0;
+            storedCount_ = 0;
+            isEmpty_ = false;
+            return true;
+        }
+        return false;
     }
 
-    void fillBuffer()
+    void loadBuffer()
     {
         assert(inputStream_.is_open());
 
-        inputStream_.read((char*)&data[0], capacity_ * sizeof(T));
+        inputStream_.read((char*)&data_[0], capacity_ * sizeof(T));
         pos_ = 0;
-        isEmpty_ = fileLeft.eof();
+        isEmpty_ = inputStream_.eof();
         storedCount_ = inputStream_.gcount() / sizeof(T);
     }
+    
+    void saveBuffer(std::vector<T> &newData, size_t from, size_t count)
+    {
+        assert(outputStream_.is_open());
 
-    bool isEmpty()
+        outputStream_.write((char*)&newData[from], count * sizeof(T));
+    }
+    void saveBuffer()
+    {
+        assert(outputStream_.is_open());
+
+        outputStream_.write((char*)&data_[0], pos_ * sizeof(T));
+    }
+    inline bool isEmpty()
     {
         return isEmpty_;
     }
-
-    bool isAllReaded()
+    inline bool isAllReaded()
     {
-        return pos_ == capacity_;
+        return pos_ >= storedCount_;
+    }
+
+    inline size_t unreadCount()
+    {
+        return storedCount_ - pos_;
+    }
+
+    inline size_t pos()
+    {
+        return pos_;
+    }
+    inline void pos(size_t newPos)
+    {
+        pos_ = newPos;
+    }
+    inline void incPos(size_t count = 1)
+    {
+        assert(pos_+count <= storedCount_);
+
+        pos_ += count;
+    }
+    inline size_t storedCount()
+    {
+        return storedCount_;
+    }
+    std::vector<T>& data()
+    {
+        return data_;
+    }
+    T curValue()
+    {
+        return data_[pos_];
+    }
+    void writeItem(T newVal)
+    {
+        assert(outputStream_.is_open());
+
+        data_[pos_] = newVal;
+        pos_++;
+    }
+    void closeFiles()
+    {
+        if(inputStream_.is_open())
+            inputStream_.close();
+        if(outputStream_.is_open())
+            outputStream_.close();
     }
 private:
     std::ofstream outputStream_;
     std::ifstream inputStream_;
+	std::vector<T> data_;
     bool isEmpty_;
 	size_t pos_;
 	size_t storedCount_;
@@ -105,27 +170,23 @@ private:
 template<typename T>
 void mergeBuffers(SortBuffer<T> &l, SortBuffer<T> &r, SortBuffer<T> &out)
 {
-    size_t delta = l.pos+r.pos;
-    size_t writePos = 0;
-    while(l.pos+r.pos < l.count + r.count)
+    while(l.pos()+r.pos() < l.storedCount() + r.storedCount())
     {
-        if((l.pos < l.count) && (r.pos < r.count))
+        if(!l.isAllReaded() && !r.isAllReaded())
         {
-            if(l.data[l.pos] <= r.data[r.pos])
+            if(l.curValue() <= r.curValue())
             {
-                out.data[writePos] = l.data[l.pos];
-                l.pos++;
+                out.writeItem(l.curValue());
+                l.incPos();
             } else
             {
-                out.data[writePos] = r.data[r.pos];
-                r.pos++;
+                out.writeItem(r.curValue());
+                r.incPos();
             }
-            writePos++;
         } else {
 			break;
         }
     }
-    out.pos = l.pos+r.pos-delta;
 }
 
 typedef std::vector<std::string> FilesList;
@@ -147,63 +208,40 @@ void mergeFiles(const FilesList &list)
 
     for(int i=0; i<list.size(); i=i+2)
     {
-        std::ifstream fileLeft(list[i].c_str(), std::ios::in | std::ios::binary);
-        std::ifstream fileRight(list[i+1].c_str(), std::ios::in | std::ios::binary);
-
         if(i+1 >= list.size())
         {
             resultList.push_back(list[i]);
             break;
         }
-        std::cout << "Left buffer: " << list[i] << ", Right buffer: " << list[i+1] << std::endl;
-        bool isEmptyLeft = false;
-        bool isEmptyRight = false;
-        inBufferL.pos = inBufferR.pos = outBuffer.pos = inBuffLen;
-        inBufferL.count = inBufferR.count = inBuffLen;
+        inBufferL.setInFile(list[i]);
+        inBufferR.setInFile(list[i+1]);
         const std::string outFileName = genNewTempFileName();
-        std::cout << "Out file: " << outFileName << std::endl;
-        std::ofstream out(outFileName.c_str(), std::ios::out | std::ios::binary);
+        outBuffer.setOutFile(outFileName);
+
+        std::cout << "Left buffer: " << list[i] << ", Right buffer: " << list[i+1] 
+                << " Out file: " << outFileName << std::endl;
         do
         {
-            if(!isEmptyLeft && inBufferL.pos == inBuffLen)
-            {
-                fileLeft.read((char*)&inBufferL.data[0], inBuffLen * sizeof(T));
-                inBufferL.pos = 0;
-                if(isEmptyLeft = fileLeft.eof())
-                    inBufferL.count = fileLeft.gcount() / sizeof(T);
-                //std::cout << "Left: " << inBufferL.count << std::endl;
-            }
-            if(!isEmptyRight && inBufferR.pos == inBuffLen)
-            {
-                fileRight.read((char*)&inBufferR.data[0], inBuffLen * sizeof(T));
-                inBufferR.pos = 0;
-                if(isEmptyRight = fileRight.eof())
-                    inBufferR.count = fileRight.gcount() / sizeof(T);
-                //std::cout << "Right: " << inBufferR.count << std::endl;
-            }
-            outBuffer.pos = 0;
+            if(!inBufferL.isEmpty() && inBufferL.isAllReaded())
+                inBufferL.loadBuffer();
+            if(!inBufferR.isEmpty() && inBufferR.isAllReaded())
+                inBufferR.loadBuffer();
+            outBuffer.pos(0);
             mergeBuffers(inBufferL, inBufferR, outBuffer);
-            if(outBuffer.pos)
+            if(outBuffer.pos() > 0)
+                outBuffer.saveBuffer();
+            if((!inBufferL.isAllReaded() || !inBufferR.isAllReaded()) &&
+                (inBufferL.isEmpty() && inBufferR.isEmpty()) || outBuffer.pos() == 0)
             {
-                //isSorted(outBuffer.data, outBuffer.pos);
-                out.write((char*)&outBuffer.data[0], outBuffer.pos * sizeof(T));
-                //std::cout << "To out: " << outBuffer.pos
-                    //<< " Left: " << inBufferL.count - inBufferL.pos << " " << isEmptyLeft
-                    //<< " Right: " << inBufferR.count - inBufferR.pos << " " <<isEmptyRight
-                    //<< std::endl;
+                auto &currentBuffer = inBufferL.isAllReaded() ? inBufferR : inBufferL ;
+                outBuffer.saveBuffer(currentBuffer.data(), currentBuffer.pos(), currentBuffer.unreadCount());
             }
-            if((inBufferL.count - inBufferL.pos > 0 || inBufferR.count - inBufferR.pos > 0) &&
-                (isEmptyLeft && isEmptyRight) || outBuffer.pos == 0)
-            {
-                auto &currentBuffer = (inBufferL.count - inBufferL.pos > 0) ?
-                    inBufferL : inBufferR;
-                //std::cout << "To out (1): " << currentBuffer.count - currentBuffer.pos
-                    //<< " Left: " << inBufferL.count - inBufferL.pos
-                    //<< " Right: " << inBufferR.count - inBufferR.pos
-                    //<< std::endl;
-                out.write((char*)&currentBuffer.data[currentBuffer.pos], (currentBuffer.count - currentBuffer.pos) * sizeof(T));
-            }
-        }while((!isEmptyLeft || !isEmptyRight) && outBuffer.pos != 0);
+        }while((!inBufferL.isEmpty() || !inBufferR.isEmpty()) && outBuffer.pos() != 0);
+
+        inBufferL.closeFiles();
+        inBufferR.closeFiles();
+        outBuffer.closeFiles();
+
         resultList.push_back(outFileName);
     }
     if(resultList.size() > 1)
