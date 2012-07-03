@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <iterator>
 #include <cassert>
+#include <thread>
 #include "support.hpp"
 
 using namespace std::chrono;
@@ -253,11 +254,39 @@ void printDiff(const time_point<high_resolution_clock> &start, const time_point<
 }
 
 template<typename T>
+class BuffersPool
+{
+public:
+    BuffersPool(size_t maxPoolSize, size_t buffersCount)
+        : maxPoolSize_(maxPoolSize)
+        , buffersCount_(buffersCount)
+    {
+    }
+    T& getBuffer()
+    {
+        return 0;
+    }
+    void freeBuffer(T& buffer)
+    {
+    }
+private:
+    struct BuffInfo
+    {
+        std::unique_ptr<T> buffer_;
+        bool isFree_;
+    };
+    std::vector<BuffInfo> buffers_;
+    size_t maxPoolSize_;
+    size_t buffersCount_;
+};
+
+template<typename T>
 FilesList sortFragments(std::ifstream &in)
 {
-   size_t inBuffLen = 128*1024*1024;
+    size_t inBuffLen = 128*1024*1024;
     //size_t inBuffLen = 1000;
     std::vector<T> inBuffer(inBuffLen / sizeof(T));
+    BuffersPool<std::vector<T>> buffers(inBuffLen, 2);
 
     in.seekg(0, std::ios::end);
     size_t inLen = in.tellg();
@@ -273,9 +302,12 @@ FilesList sortFragments(std::ifstream &in)
         in.read((char*)&inBuffer[0], inBuffLen);
 
         qsort(inBuffer);
-        files[i] = genNewTempFileName();
-        std::ofstream out(files[i].c_str(), std::ios::out | std::ios::binary);
-        out.write((char*)&inBuffer[0], inBuffLen);
+        auto fileName = genNewTempFileName();
+        files[i] = fileName;
+        auto writer = std::thread([&fileName, &inBuffer](){
+                std::ofstream out(fileName.c_str(), std::ios::out | std::ios::binary);
+                out.write((char*)&inBuffer[0], inBuffer.size() * sizeof(T));
+            });
     }
 
     return files;
