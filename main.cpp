@@ -15,40 +15,6 @@ using namespace std::chrono;
 
 
 template<typename T>
-int calcPivot(const std::vector<T> &arr, int l, int h)
-{
-    return arr[ (l + h) / 2 ];
-}
-
-template<typename T>
-void intQsort(std::vector<T> &arr, int left, int right)
-{
-    int i = left, j = right;
-    T pivot = calcPivot( arr, left, right);
-    while( i <= j )
-    {
-        while( arr[ i ] < pivot ) i++;
-        while( arr[ j ] > pivot ) j--;
-        if( i <= j )
-        {
-            std::swap( arr[ i ], arr[ j ] );
-            i++;
-            j--;
-        }
-    };
-
-    if( left < j )
-        intQsort( arr, left, j );
-    if( i < right )
-        intQsort( arr, i, right );
-}
-
-void qsort(std::vector<uint32_t> &arr)
-{
-    intQsort( arr, 0, arr.size()-1 );
-}
-
-template<typename T>
 class SortBuffer
 {
 public:
@@ -166,6 +132,39 @@ private:
 	size_t storedCount_;
     size_t capacity_;
 };
+
+template<typename T>
+T calcPivot(const std::vector<T> &arr, int l, int h)
+{
+    return arr[ (l + h) / 2 ];
+}
+
+template<typename T>
+void intQsort(std::vector<T> &arr, int left, int right)
+{
+    int i = left, j = right;
+    T pivot = calcPivot( arr, left, right);
+    while( i <= j )
+    {
+        while( arr[ i ] < pivot ) i++;
+        while( arr[ j ] > pivot ) j--;
+        if( i <= j )
+        {
+            std::swap( arr[ i ], arr[ j ] );
+            i++;
+            j--;
+        }
+    };
+    if( left < j )
+        intQsort( arr, left, j );
+    if( i < right )
+        intQsort( arr, i, right );
+}
+
+void qsort(std::vector<uint32_t> &arr)
+{
+    intQsort( arr, 0, arr.size()-1 );
+}
 
 template<typename T>
 void mergeBuffers(SortBuffer<T> &l, SortBuffer<T> &r, SortBuffer<T> &out)
