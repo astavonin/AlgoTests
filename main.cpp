@@ -54,7 +54,7 @@ class SortBuffer
 public:
 
 	SortBuffer(size_t buffSize)
-        : isEmpty_(false)
+        : isFileEmpty_(false)
         , pos_(buffSize)
         , storedCount_(0)
         , capacity_(buffSize)
@@ -75,7 +75,7 @@ public:
         {
             pos_ = 0;
             storedCount_ = 0;
-            isEmpty_ = false;
+            isFileEmpty_ = false;
             return true;
         }
         return false;
@@ -87,7 +87,7 @@ public:
 
         inputStream_.read((char*)&data_[0], capacity_ * sizeof(T));
         pos_ = 0;
-        isEmpty_ = inputStream_.eof();
+        isFileEmpty_ = inputStream_.eof();
         storedCount_ = inputStream_.gcount() / sizeof(T);
     }
     
@@ -103,9 +103,9 @@ public:
 
         outputStream_.write((char*)&data_[0], pos_ * sizeof(T));
     }
-    inline bool isEmpty()
+    inline bool isFileEmpty()
     {
-        return isEmpty_;
+        return isFileEmpty_;
     }
     inline bool isAllReaded()
     {
@@ -161,7 +161,7 @@ private:
     std::ofstream outputStream_;
     std::ifstream inputStream_;
 	std::vector<T> data_;
-    bool isEmpty_;
+    bool isFileEmpty_;
 	size_t pos_;
 	size_t storedCount_;
     size_t capacity_;
@@ -222,21 +222,21 @@ void mergeFiles(const FilesList &list)
                 << " Out file: " << outFileName << std::endl;
         do
         {
-            if(!inBufferL.isEmpty() && inBufferL.isAllReaded())
+            if(!inBufferL.isFileEmpty() && inBufferL.isAllReaded())
                 inBufferL.loadBuffer();
-            if(!inBufferR.isEmpty() && inBufferR.isAllReaded())
+            if(!inBufferR.isFileEmpty() && inBufferR.isAllReaded())
                 inBufferR.loadBuffer();
             outBuffer.pos(0);
             mergeBuffers(inBufferL, inBufferR, outBuffer);
             if(outBuffer.pos() > 0)
                 outBuffer.saveBuffer();
             if((!inBufferL.isAllReaded() || !inBufferR.isAllReaded()) &&
-                (inBufferL.isEmpty() && inBufferR.isEmpty()) || outBuffer.pos() == 0)
+                (inBufferL.isFileEmpty() && inBufferR.isFileEmpty()) || outBuffer.pos() == 0)
             {
                 auto &currentBuffer = inBufferL.isAllReaded() ? inBufferR : inBufferL ;
                 outBuffer.saveBuffer(currentBuffer.data(), currentBuffer.pos(), currentBuffer.unreadCount());
             }
-        }while((!inBufferL.isEmpty() || !inBufferR.isEmpty()) && outBuffer.pos() != 0);
+        }while((!inBufferL.isFileEmpty() || !inBufferR.isFileEmpty()) && outBuffer.pos() != 0);
 
         inBufferL.closeFiles();
         inBufferR.closeFiles();
