@@ -29,6 +29,9 @@ SET (CMAKE_ARCHIVE_OUTPUT_DIRECTORY
 SET(AlgoTests_source main.cpp support.cpp)
 SET(SortChecker_source sort_checker.cpp)
 
+find_package (Threads)
+
 ADD_EXECUTABLE(algo_tests ${AlgoTests_source})
 ADD_EXECUTABLE(sort_checker ${SortChecker_source})
 
+target_link_libraries(algo_tests ${CMAKE_THREAD_LIBS_INIT})

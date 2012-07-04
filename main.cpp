@@ -11,128 +11,10 @@
 #include <cassert>
 #include <thread>
 #include "support.hpp"
+#include "async_write.hpp"
+#include "sort_buffer.hpp"
 
 using namespace std::chrono;
-
-
-template<typename T>
-class SortBuffer
-{
-public:
-
-	SortBuffer(size_t buffSize)
-        : isFileEmpty_(false)
-        , pos_(buffSize)
-        , storedCount_(0)
-        , capacity_(buffSize)
-	{
-		data_.resize(buffSize);
-	}
-
-    bool setOutFile(const std::string fileName)
-    {
-        outputStream_.open(fileName.c_str(), std::ios::out | std::ios::binary);
-        return outputStream_.is_open();
-    }
-
-    bool setInFile(const std::string fileName)
-    {
-        inputStream_.open(fileName.c_str(), std::ios::in | std::ios::binary);
-        if(inputStream_.is_open())
-        {
-            pos_ = 0;
-            storedCount_ = 0;
-            isFileEmpty_ = false;
-            return true;
-        }
-        return false;
-    }
-
-    void loadBuffer()
-    {
-        assert(inputStream_.is_open());
-
-        inputStream_.read((char*)&data_[0], capacity_ * sizeof(T));
-        pos_ = 0;
-        isFileEmpty_ = inputStream_.eof();
-        storedCount_ = inputStream_.gcount() / sizeof(T);
-    }
-    
-    void saveBuffer(std::vector<T> &newData, size_t from, size_t count)
-    {
-        assert(outputStream_.is_open());
-
-        outputStream_.write((char*)&newData[from], count * sizeof(T));
-    }
-    void saveBuffer()
-    {
-        assert(outputStream_.is_open());
-
-        outputStream_.write((char*)&data_[0], pos_ * sizeof(T));
-    }
-    inline bool isFileEmpty()
-    {
-        return isFileEmpty_;
-    }
-    inline bool isAllReaded()
-    {
-        return pos_ >= storedCount_;
-    }
-
-    inline size_t unreadCount()
-    {
-        return storedCount_ - pos_;
-    }
-
-    inline size_t pos()
-    {
-        return pos_;
-    }
-    inline void pos(size_t newPos)
-    {
-        pos_ = newPos;
-    }
-    inline void incPos(size_t count = 1)
-    {
-        assert(pos_+count <= storedCount_);
-
-        pos_ += count;
-    }
-    inline size_t storedCount()
-    {
-        return storedCount_;
-    }
-    std::vector<T>& data()
-    {
-        return data_;
-    }
-    T curValue()
-    {
-        return data_[pos_];
-    }
-    void writeItem(T newVal)
-    {
-        assert(outputStream_.is_open());
-
-        data_[pos_] = newVal;
-        pos_++;
-    }
-    void closeFiles()
-    {
-        if(inputStream_.is_open())
-            inputStream_.close();
-        if(outputStream_.is_open())
-            outputStream_.close();
-    }
-private:
-    std::ofstream outputStream_;
-    std::ifstream inputStream_;
-	std::vector<T> data_;
-    bool isFileEmpty_;
-	size_t pos_;
-	size_t storedCount_;
-    size_t capacity_;
-};
 
 template<typename T>
 T calcPivot(const std::vector<T> &arr, int l, int h)
@@ -168,7 +50,7 @@ void qsort(std::vector<uint32_t> &arr)
 }
 
 template<typename T>
-void mergeBuffers(SortBuffer<T> &l, SortBuffer<T> &r, SortBuffer<T> &out)
+void mergeBuffers(SortInputBuffer<T> &l, SortInputBuffer<T> &r, SortBuffer<T> &out)
 {
     while(l.pos()+r.pos() < l.storedCount() + r.storedCount())
     {
@@ -198,8 +80,8 @@ void mergeFiles(const FilesList &list)
     //size_t inBuffLen = 200;
     size_t outBuffLen = inBuffLen*2;
 
-    SortBuffer<T> inBufferL(inBuffLen);
-    SortBuffer<T> inBufferR(inBuffLen);
+    SortInputBuffer<T> inBufferL(inBuffLen);
+    SortInputBuffer<T> inBufferR(inBuffLen);
     SortBuffer<T> outBuffer(outBuffLen);
 
     FilesList resultList;
@@ -254,39 +136,12 @@ void printDiff(const time_point<high_resolution_clock> &start, const time_point<
 }
 
 template<typename T>
-class BuffersPool
-{
-public:
-    BuffersPool(size_t maxPoolSize, size_t buffersCount)
-        : maxPoolSize_(maxPoolSize)
-        , buffersCount_(buffersCount)
-    {
-    }
-    T& getBuffer()
-    {
-        return 0;
-    }
-    void freeBuffer(T& buffer)
-    {
-    }
-private:
-    struct BuffInfo
-    {
-        std::unique_ptr<T> buffer_;
-        bool isFree_;
-    };
-    std::vector<BuffInfo> buffers_;
-    size_t maxPoolSize_;
-    size_t buffersCount_;
-};
-
-template<typename T>
 FilesList sortFragments(std::ifstream &in)
 {
     size_t inBuffLen = 128*1024*1024;
     //size_t inBuffLen = 1000;
-    std::vector<T> inBuffer(inBuffLen / sizeof(T));
-    BuffersPool<std::vector<T>> buffers(inBuffLen, 2);
+    //std::vector<T> inBuffer(inBuffLen / sizeof(T));
+    BuffersPool<std::vector<T>> buffers(inBuffLen / sizeof(T), 2);
 
     in.seekg(0, std::ios::end);
     size_t inLen = in.tellg();
@@ -295,19 +150,19 @@ FilesList sortFragments(std::ifstream &in)
 
     int fragments = inLen / inBuffLen;
     FilesList files(fragments);
+    AsyncWriter<T> writer(buffers);
+    writer.start();
+
     std::cout << "Total fragments: " << fragments << std::endl;
     for(int i=0; i < fragments; i++)
     {
         std::cout << "Current fragment: " << i << std::endl;
+        auto &inBuffer = buffers.getBuffer();
         in.read((char*)&inBuffer[0], inBuffLen);
 
         qsort(inBuffer);
-        auto fileName = genNewTempFileName();
-        files[i] = fileName;
-        auto writer = std::thread([&fileName, &inBuffer](){
-                std::ofstream out(fileName.c_str(), std::ios::out | std::ios::binary);
-                out.write((char*)&inBuffer[0], inBuffer.size() * sizeof(T));
-            });
+        files[i] = genNewTempFileName();
+        writer.writeData(&inBuffer, files[i]);
     }
 
     return files;
@@ -320,7 +175,7 @@ void sort(const std::string &inFile, const std::string &outFile)
     if(in.is_open())
     {
         FilesList files = sortFragments<T>(in);
-        mergeFiles<T>(files);
+        //mergeFiles<T>(files);
     }
 }
 
