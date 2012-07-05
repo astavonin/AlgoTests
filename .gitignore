@@ -8,4 +8,5 @@ random_data
 build
 *.swp
 .DS_Store
+random_data_out
 
