@@ -25,7 +25,7 @@ void sort(const std::string &inFile, const std::string &outFile)
     size_t inBuffLen = 1024 * 1024;
     size_t outBuffLen = 256 * 1024 * 1024;
     std::vector<T> inBuffer(inBuffLen / sizeof(T));
-    std::vector<T> outBuffer(outBuffLen / sizeof(T));
+    std::vector<size_t> outBuffer(outBuffLen / sizeof(size_t));
     size_t iterCount = std::numeric_limits<T>::max() / (outBuffLen / sizeof(T)) + 
                     (std::numeric_limits<T>::max() % (outBuffLen / sizeof(T)) ? 1 : 0);
     std::cout << "Iteration count: " << iterCount << std::endl;
@@ -49,7 +49,7 @@ void sort(const std::string &inFile, const std::string &outFile)
             }
         }while(!in.eof());
 
-        for(size_t i = 0; i < outBuffLen / sizeof(T); ++i)
+        for(size_t i = 0; i < outBuffLen / sizeof(size_t); ++i)
         {
             if(outBuffer[i] > 0)
             {
@@ -59,7 +59,7 @@ void sort(const std::string &inFile, const std::string &outFile)
             }
         }
         fromVal = toVal + 1;
-        toVal += outBuffLen / sizeof(T);
+        toVal += outBuffLen / sizeof(size_t);
         if(toVal == 0)
             toVal = std::numeric_limits<T>::max();
         iterCount--;
